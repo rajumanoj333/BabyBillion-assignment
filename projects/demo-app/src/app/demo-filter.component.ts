@@ -68,6 +68,49 @@ export class DemoFilterComponent implements OnInit {
       isDynamicOptions: true,
       getOptions: (filter, search, page) =>
         this.getCategoryOptions(filter, search, page),
+      // Add dependency features
+      disableWhenEmpty: true,  // Disable if parent is empty
+    },
+    {
+      name: 'subcategory',
+      type: 'options',
+      label: 'Subcategory',
+      isDynamicOptions: true,
+      dependsOn: 'category',  // Depends on category
+      disableWhenEmpty: true,
+      getOptions: (filter, search, page) =>
+        this.getSubCategoryOptions(filter, search, page),
+    },
+    {
+      name: 'brand',
+      type: 'options',
+      label: 'Brand',
+      isDynamicOptions: true,
+      getOptions: (filter, search, page) =>
+        this.getBrandOptions(filter, search, page),
+      // Add exclusion features
+      excludes: ['price_range'],  // Exclude price_range when selected
+    },
+    {
+      name: 'price_range',
+      type: 'options',
+      label: 'Price Range',
+      staticOptions: [
+        { label: 'Under $50', value: 'under_50' },
+        { label: '$50 - $100', value: '50_100' },
+        { label: 'Over $100', value: 'over_100' },
+      ],
+      exclusionGroup: 'pricing',  // Group with other pricing filters
+    },
+    {
+      name: 'budget_friendly',
+      type: 'options',
+      label: 'Budget Friendly',
+      staticOptions: [
+        { label: 'Yes', value: 'yes' },
+        { label: 'No', value: 'no' },
+      ],
+      exclusionGroup: 'pricing',  // Mutually exclusive with price_range
     },
     {
       name: 'price',
@@ -99,6 +142,48 @@ export class DemoFilterComponent implements OnInit {
   }
 
   async getCategoryOptions(
+    filter: DftFilterItem,
+    search?: string,
+    page: number = 1
+  ) {
+    const result = await this.optionsService.search(
+      filter.name,
+      search,
+      page
+    );
+    return result;
+  }
+
+  async getSubCategoryOptions(
+    filter: DftFilterItem,
+    search?: string,
+    page: number = 1
+  ) {
+    // This would normally fetch subcategories based on selected category
+    // For demo, return generic subcategories
+    const list = [
+      { label: 'Electronics', value: 'electronics' },
+      { label: 'Clothing', value: 'clothing' },
+      { label: 'Books', value: 'books' },
+      { label: 'Home & Garden', value: 'home' },
+      { label: 'Sports', value: 'sports' },
+    ];
+    
+    const filtered = (search && search.trim().length > 0)
+      ? list.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase()))
+      : list;
+
+    const totalItems = filtered.length;
+    const pageSize = 6;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const p = Math.max(1, Math.min(page, totalPages));
+    const start = (p - 1) * pageSize;
+    const items = filtered.slice(start, start + pageSize);
+
+    return { items, page: p, totalPages, totalItems };
+  }
+
+  async getBrandOptions(
     filter: DftFilterItem,
     search?: string,
     page: number = 1

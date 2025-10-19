@@ -31,6 +31,7 @@ interface CompareOperator {
             type="number"
             placeholder="Min"
             [value]="value?.min || ''"
+            [disabled]="isDisabled"
             (input)="onValueChange('min', $event)"
             [min]="filter.minValue"
             [max]="filter.maxValue" />
@@ -43,17 +44,19 @@ interface CompareOperator {
             type="number"
             placeholder="Max"
             [value]="value?.max || ''"
+            [disabled]="isDisabled"
             (input)="onValueChange('max', $event)"
             [min]="filter.minValue"
             [max]="filter.maxValue" />
         </mat-form-field>
         
         <button 
-          *ngIf="value && (value.min !== null || value.max !== null)" 
+          *ngIf="value && (value.min !== null || value.max !== null) && !isDisabled" 
           mat-icon-button 
           class="clear-button"
           (click)="clearValue()"
-          aria-label="Clear">
+          aria-label="Clear"
+          [disabled]="isDisabled">
           <mat-icon>close</mat-icon>
         </button>
       </div>
@@ -62,7 +65,10 @@ interface CompareOperator {
       <div *ngIf="filter.compareType === 'single'" class="flex gap-2 items-end">
         <mat-form-field class="flex-1" subscriptSizing="dynamic">
           <mat-label>Operator</mat-label>
-          <mat-select [value]="value?.operator || defaultOperator" (selectionChange)="onOperatorChange($event.value)">
+          <mat-select 
+            [value]="value?.operator || defaultOperator" 
+            (selectionChange)="onOperatorChange($event.value)"
+            [disabled]="isDisabled">
             <mat-option *ngFor="let op of operators" [value]="op.value">{{ op.label }}</mat-option>
           </mat-select>
         </mat-form-field>
@@ -74,17 +80,19 @@ interface CompareOperator {
             type="number"
             [placeholder]="'Value'"
             [value]="value?.value || ''"
+            [disabled]="isDisabled"
             (input)="onValueChange('value', $event)"
             [min]="filter.minValue"
             [max]="filter.maxValue" />
         </mat-form-field>
         
         <button 
-          *ngIf="value" 
+          *ngIf="value && !isDisabled" 
           mat-icon-button 
           class="clear-button"
           (click)="clearValue()"
-          aria-label="Clear">
+          aria-label="Clear"
+          [disabled]="isDisabled">
           <mat-icon>close</mat-icon>
         </button>
       </div>
@@ -105,6 +113,14 @@ interface CompareOperator {
 export class DftCompareFilterComponent implements OnInit {
   @Input() filter!: DftFilterItem;
   @Input() value: any = { min: null, max: null };
+  private _isDisabled = false;
+  @Input() 
+  set isDisabled(value: boolean) {
+    this._isDisabled = value;
+  }
+  get isDisabled(): boolean {
+    return this._isDisabled;
+  }
   @Output() valueChange = new EventEmitter<any>();
   
   operators: CompareOperator[] = [
@@ -130,6 +146,7 @@ export class DftCompareFilterComponent implements OnInit {
   }
 
   onValueChange(field: string, event: any) {
+    if (this.isDisabled) return;
     const inputValue = event.target.value !== '' ? Number(event.target.value) : null;
     
     if (this.filter.compareType === 'range') {
@@ -144,12 +161,14 @@ export class DftCompareFilterComponent implements OnInit {
   }
 
   onOperatorChange(operator: string) {
+    if (this.isDisabled) return;
     const newValue = { ...this.value, operator };
     this.value = newValue;
     this.valueChange.emit(newValue);
   }
 
   clearValue() {
+    if (this.isDisabled) return;
     let clearedValue: any;
     if (this.filter.compareType === 'range') {
       clearedValue = { min: null, max: null };

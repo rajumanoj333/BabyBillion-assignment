@@ -28,6 +28,7 @@ import { MockOptionsService, OptionItem, PageResult } from '../options.service';
         matInput
         placeholder="Search options..."
         [formControl]="searchControl"
+        [disabled]="isDisabled"
         [matAutocomplete]="auto" />
       
       <!-- Autocomplete for dynamic options -->
@@ -42,15 +43,17 @@ import { MockOptionsService, OptionItem, PageResult } from '../options.service';
         
         <mat-option 
           *ngFor="let option of (filteredOptions$ | async)?.items"
-          [value]="option.value">
+          [value]="option.value"
+          [disabled]="isDisabled">
           {{ option.label }}
         </mat-option>
         
         <!-- Load more option if pagination is available -->
         <mat-option 
-          *ngIf="hasMoreOptions && !loading" 
+          *ngIf="hasMoreOptions && !loading && !isDisabled" 
           (click)="loadMoreOptions()"
-          class="font-medium text-blue-600">
+          class="font-medium text-blue-600"
+          [disabled]="isDisabled">
           Load More...
         </mat-option>
       </mat-autocomplete>
@@ -61,22 +64,25 @@ import { MockOptionsService, OptionItem, PageResult } from '../options.service';
         [value]="selectedValues"
         (selectionChange)="onSelectionChange($event.value)"
         multiple
-        panelClass="dft-options-panel">
+        panelClass="dft-options-panel"
+        [disabled]="isDisabled">
         <mat-option 
           *ngFor="let option of staticOptions" 
-          [value]="option.value">
+          [value]="option.value"
+          [disabled]="isDisabled">
           {{ option.label }}
         </mat-option>
       </mat-select>
       
       <!-- Clear button -->
       <button 
-        *ngIf="selectedValues && selectedValues.length > 0" 
+        *ngIf="selectedValues && selectedValues.length > 0 && !isDisabled" 
         mat-icon-button 
         matSuffix
         class="clear-button"
         (click)="clearSelection()"
-        aria-label="Clear selection">
+        aria-label="Clear selection"
+        [disabled]="isDisabled">
         <mat-icon>close</mat-icon>
       </button>
     </mat-form-field>
@@ -88,6 +94,7 @@ import { MockOptionsService, OptionItem, PageResult } from '../options.service';
         class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
         {{ getOptionLabel(value) }}
         <button 
+          *ngIf="!isDisabled"
           type="button" 
           class="ml-1 text-blue-600 hover:text-blue-800"
           (click)="removeValue(value)"
@@ -115,9 +122,23 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
   @Input() filter!: DftFilterItem;
   @Input() value: any[] = [];
   @Input() staticOptions: OptionItem[] = [];
+  private _isDisabled = false;
+  @Input() 
+  set isDisabled(value: boolean) {
+    this._isDisabled = value;
+    if (value) {
+      this.searchControl.disable({onlySelf: true, emitEvent: false});
+    } else {
+      this.searchControl.enable({onlySelf: true, emitEvent: false});
+    }
+  }
+  get isDisabled(): boolean {
+    return this._isDisabled;
+  }
+  
   @Output() valueChange = new EventEmitter<any[]>();
 
-  searchControl = new FormControl('');
+  searchControl = new FormControl({value: '', disabled: false});
   selectedValues: any[] = [];
   
   private optionsService = inject(MockOptionsService);
@@ -133,6 +154,11 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.selectedValues = this.value || [];
+    
+    // Update disabled state when isDisabled input changes
+    if (this.isDisabled) {
+      this.searchControl.disable({onlySelf: true, emitEvent: false});
+    }
     
     if (this.filter.isDynamicOptions && this.filter.getOptions) {
       const search$ = this.searchControl.valueChanges.pipe(
@@ -178,11 +204,13 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
   }
 
   onSelectionChange(newValues: any[]) {
+    if (this.isDisabled) return;
     this.selectedValues = newValues;
     this.valueChange.emit(newValues);
   }
 
   onOptionSelected(event: any) {
+    if (this.isDisabled) return;
     const selectedValue = event.option.value;
     if (!this.selectedValues.includes(selectedValue)) {
       this.selectedValues = [...this.selectedValues, selectedValue];
@@ -192,7 +220,7 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
   }
 
   loadMoreOptions() {
-    if (this.loading || !this.hasMoreOptions) return;
+    if (this.isDisabled || this.loading || !this.hasMoreOptions) return;
     
     this.loading = true;
     this.currentPage++;
@@ -220,12 +248,14 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
   }
 
   clearSelection() {
+    if (this.isDisabled) return;
     this.selectedValues = [];
     this.valueChange.emit([]);
     this.searchControl.setValue('');
   }
 
   removeValue(value: any) {
+    if (this.isDisabled) return;
     this.selectedValues = this.selectedValues.filter(v => v !== value);
     this.valueChange.emit([...this.selectedValues]);
   }

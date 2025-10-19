@@ -27,12 +27,18 @@ import { MockOptionsService } from './options.service';
     <div class="p-4">
       <div class="grid gap-3 md:grid-cols-3">
         <ng-container *ngFor="let f of filters; trackBy: trackByFilter">
-          <div class="border rounded p-2 mat-elevation-z1">
-            <!-- Using the new sub-components -->
+          <!-- Only show filter if it's visible based on dependencies -->
+          <div 
+            *ngIf="isFilterVisible(f.name)" 
+            class="border rounded p-2 mat-elevation-z1"
+            [class.opacity-50]="isFilterDisabled(f.name) || isFilterExcluded(f.name)"
+          >
+            <!-- Using the new sub-components with disabled state -->
             <dft-text-filter
               *ngIf="f.type === 'text'"
               [filter]="f"
               [value]="values()[f.name]"
+              [isDisabled]="isFilterDisabled(f.name) || isFilterExcluded(f.name)"
               (valueChange)="onValueChange(f.name, $event)"
             >
             </dft-text-filter>
@@ -41,6 +47,7 @@ import { MockOptionsService } from './options.service';
               *ngIf="f.type === 'options'"
               [filter]="f"
               [value]="values()[f.name] || []"
+              [isDisabled]="isFilterDisabled(f.name) || isFilterExcluded(f.name)"
               (valueChange)="onValueChange(f.name, $event)"
             >
             </dft-options-filter>
@@ -49,9 +56,19 @@ import { MockOptionsService } from './options.service';
               *ngIf="f.type === 'compare'"
               [filter]="f"
               [value]="values()[f.name]"
+              [isDisabled]="isFilterDisabled(f.name) || isFilterExcluded(f.name)"
               (valueChange)="onValueChange(f.name, $event)"
             >
             </dft-compare-filter>
+            
+            <!-- Show exclusion message if filter is excluded -->
+            <div 
+              *ngIf="isFilterExcluded(f.name)" 
+              class="text-xs text-gray-500 mt-1"
+              style="line-height: 1.2;"
+            >
+              (Excluded by another active filter)
+            </div>
           </div>
         </ng-container>
       </div>
@@ -131,5 +148,35 @@ export class DftFilterComponent implements OnInit {
 
   trackByFilter(index: number, filter: DftFilterItem) {
     return filter.name;
+  }
+  
+  /**
+   * Check if a filter should be visible based on dependencies
+   */
+  isFilterVisible(filterName: string): boolean {
+    if (this.store) {
+      return this.store.isFilterVisible(filterName);
+    }
+    return true;
+  }
+  
+  /**
+   * Check if a filter should be disabled based on dependencies or exclusivity
+   */
+  isFilterDisabled(filterName: string): boolean {
+    if (this.store) {
+      return this.store.isFilterDisabled(filterName);
+    }
+    return false;
+  }
+  
+  /**
+   * Check if a filter is excluded by another filter
+   */
+  isFilterExcluded(filterName: string): boolean {
+    if (this.store) {
+      return this.store.isFilterExcluded(filterName);
+    }
+    return false;
   }
 }

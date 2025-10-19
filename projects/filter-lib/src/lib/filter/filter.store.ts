@@ -2,13 +2,15 @@
 import { signal, computed, Signal } from '@angular/core';
 import { DftFilterApplyModel, DftFilterItem } from './filter.model';
 import { safeParse, safeStringify } from './filter.query';
+import { isFilterValueEmpty } from './filter.util';
 
 /**
- * Simple FilterStore built with Angular Signals.
+ * Advanced FilterStore built with Angular Signals.
  *
  * - Supports creating/using multiple store instances by id.
  * - Holds current filter items and applied values.
  * - Exposes signals for components to read reactively.
+ * - Handles dependencies between filters and mutual exclusivity.
  */
 
 type StoreState = {
@@ -42,6 +44,12 @@ export class FilterStore {
 
   /** Initialize filters (replace existing) */
   initFilters(filters: DftFilterItem[]) {
+    // Validate dependencies to prevent circular dependencies
+    const circularDeps = this.validateDependencies(filters);
+    if (circularDeps.length > 0) {
+      console.warn(`Circular dependencies detected: ${circularDeps.join(', ')}`);
+    }
+    
     this.state.update(s => ({
       ...s,
       filters: filters ?? [],
@@ -50,10 +58,54 @@ export class FilterStore {
     }));
   }
 
-  /** Update a single filter value (reactive) */
+  /** Update a single filter value (reactive) - with dependency and exclusivity handling */
   setValue(name: string, value: any) {
     this.state.update(s => {
       const nextValues = { ...s.values, [name]: value };
+      
+      // Handle exclusivity first - check if this filter excludes others
+      const currentFilters = s.filters;
+      const currentFilter = currentFilters.find(f => f.name === name);
+      
+      if (currentFilter && currentFilter.excludes && currentFilter.excludes.length > 0) {
+        currentFilter.excludes.forEach(excludedFilterName => {
+          if (nextValues.hasOwnProperty(excludedFilterName) && value !== null && value !== undefined && value !== '') {
+            delete nextValues[excludedFilterName];
+          }
+        });
+      }
+      
+      // Handle exclusion groups - only allow one filter from each group to be active
+      if (currentFilter && currentFilter.exclusionGroup) {
+        const groupFilters = currentFilters.filter(f => 
+          f.exclusionGroup === currentFilter.exclusionGroup && f.name !== name
+        );
+        
+        if (value !== null && value !== undefined && value !== '') {
+          // Clear other filters in the same exclusion group
+          groupFilters.forEach(f => {
+            delete nextValues[f.name];
+          });
+        }
+      }
+      
+      // Handle dependency logic - check if any dependent filters should be cleared
+      // When a parent filter changes, clear its children if they should be disabled 
+      currentFilters.forEach(filter => {
+        if (filter.dependsOn) {
+          const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+          const shouldClear = dependsOn.some(parentName => parentName === name);
+          
+          if (shouldClear) {
+            const parentValue = value;
+            // If parent is empty and the child has disableWhenEmpty set to true, clear the child
+            if (isFilterValueEmpty(parentValue) && filter.disableWhenEmpty) {
+              delete nextValues[filter.name];
+            }
+          }
+        }
+      });
+
       return { ...s, values: nextValues };
     });
   }
@@ -63,6 +115,23 @@ export class FilterStore {
     this.state.update(s => {
       const nextValues = { ...s.values };
       delete nextValues[name];
+      
+      // Handle dependency logic - when a parent filter is cleared, potentially clear its children
+      const currentFilters = s.filters;
+      const currentFilter = currentFilters.find(f => f.name === name);
+      
+      if (currentFilter) {
+        // Find all filters that depend on this filter
+        currentFilters.forEach(filter => {
+          if (filter.dependsOn) {
+            const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+            if (dependsOn.includes(name) && filter.disableWhenEmpty) {
+              delete nextValues[filter.name];
+            }
+          }
+        });
+      }
+      
       return { ...s, values: nextValues };
     });
   }
@@ -84,7 +153,42 @@ export class FilterStore {
 
   /** Replace entire values object (useful for hydrating from query params) */
   setAllValues(values: Record<string, any>) {
-    this.state.update(s => ({ ...s, values: values ?? {} }));
+    // Process the values to handle exclusivity and dependencies
+    let processedValues = { ...values };
+    const currentFilters = this.state().filters;
+    
+    // Process exclusivity constraints 
+    Object.keys(processedValues).forEach(filterName => {
+      if (processedValues[filterName] !== null && processedValues[filterName] !== undefined && processedValues[filterName] !== '') {
+        const currentFilter = currentFilters.find(f => f.name === filterName);
+        
+        if (currentFilter) {
+          // Handle explicit exclusions
+          if (currentFilter.excludes) {
+            currentFilter.excludes.forEach(excludedName => {
+              if (processedValues.hasOwnProperty(excludedName)) {
+                delete processedValues[excludedName];
+              }
+            });
+          }
+          
+          // Handle exclusion groups
+          if (currentFilter.exclusionGroup) {
+            const groupFilters = currentFilters.filter(f => 
+              f.exclusionGroup === currentFilter.exclusionGroup && f.name !== filterName
+            );
+            
+            groupFilters.forEach(f => {
+              if (processedValues.hasOwnProperty(f.name)) {
+                delete processedValues[f.name];
+              }
+            });
+          }
+        }
+      }
+    });
+    
+    this.state.update(s => ({ ...s, values: processedValues ?? {} }));
   }
 
   /** Save current values to localStorage */
@@ -154,5 +258,182 @@ export class FilterStore {
     });
     
     return params;
+  }
+
+  /**
+   * Check if a filter should be visible based on its dependencies
+   */
+  isFilterVisible(filterName: string): boolean {
+    const currentState = this.state();
+    const filter = currentState.filters.find(f => f.name === filterName);
+    
+    if (!filter || !filter.dependsOn) {
+      return true;
+    }
+    
+    const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+    
+    for (const parentName of dependsOn) {
+      const parentFilter = currentState.filters.find(f => f.name === parentName);
+      const parentValue = currentState.values[parentName];
+      
+      if (!parentFilter) {
+        // If parent doesn't exist, filter should not be visible
+        return false;
+      }
+      
+      // If parent value is empty and this filter has disableWhenEmpty, hide it
+      if (filter.disableWhenEmpty && isFilterValueEmpty(parentValue)) {
+        return false;
+      }
+      
+      // If parent has showWhen function, use it to determine visibility
+      if (parentFilter.showWhen && typeof parentFilter.showWhen === 'function') {
+        if (!parentFilter.showWhen(parentValue)) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  /**
+   * Check if a filter should be disabled based on its dependencies
+   */
+  isFilterDisabled(filterName: string): boolean {
+    const currentState = this.state();
+    const filter = currentState.filters.find(f => f.name === filterName);
+    
+    if (!filter || !filter.dependsOn) {
+      return false;
+    }
+    
+    const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+    
+    for (const parentName of dependsOn) {
+      const parentValue = currentState.values[parentName];
+      
+      // If parent value is empty and this filter has disableWhenEmpty, disable it
+      if (filter.disableWhenEmpty && isFilterValueEmpty(parentValue)) {
+        return true;
+      }
+      
+      // Check if parent has showWhen function and it returns false
+      const parentFilter = currentState.filters.find(f => f.name === parentName);
+      if (parentFilter && parentFilter.showWhen && typeof parentFilter.showWhen === 'function') {
+        if (!parentFilter.showWhen(parentValue)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Get dependent filters of a given filter
+   */
+  getDependentFilters(filterName: string): DftFilterItem[] {
+    const currentState = this.state();
+    return currentState.filters.filter(filter => {
+      if (filter.dependsOn) {
+        const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+        return dependsOn.includes(filterName);
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Check if a filter is in conflict with others based on exclusivity
+   */
+  isFilterExcluded(filterName: string): boolean {
+    const currentState = this.state();
+    const filter = currentState.filters.find(f => f.name === filterName);
+    
+    if (!filter) {
+      return false;
+    }
+    
+    const currentValues = currentState.values;
+    
+    // Check if any active filter excludes this one
+    for (const [activeFilterName, activeFilterValue] of Object.entries(currentValues)) {
+      if (activeFilterName !== filterName && 
+          !isFilterValueEmpty(activeFilterValue)) {
+        const activeFilter = currentState.filters.find(f => f.name === activeFilterName);
+        
+        if (activeFilter && activeFilter.excludes && activeFilter.excludes.includes(filterName)) {
+          return true;
+        }
+      }
+    }
+    
+    // Check if this filter is blocked by exclusion group
+    if (filter.exclusionGroup) {
+      for (const [activeFilterName, activeFilterValue] of Object.entries(currentValues)) {
+        if (activeFilterName !== filterName && 
+            !isFilterValueEmpty(activeFilterValue)) {
+          const activeFilter = currentState.filters.find(f => f.name === activeFilterName);
+          
+          if (activeFilter && activeFilter.exclusionGroup === filter.exclusionGroup) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Validate dependencies to detect circular dependencies
+   */
+  private validateDependencies(filters: DftFilterItem[]): string[] {
+    const circularDependencies: string[] = [];
+    const dependencyGraph: { [key: string]: string[] } = {};
+    
+    // Build dependency graph
+    filters.forEach(filter => {
+      if (filter.dependsOn) {
+        const dependsOn = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+        dependencyGraph[filter.name] = dependsOn;
+      } else {
+        dependencyGraph[filter.name] = [];
+      }
+    });
+    
+    // Check for circular dependencies using DFS
+    const visited: { [key: string]: boolean } = {};
+    const recStack: { [key: string]: boolean } = {};
+    
+    const hasCycle = (node: string): boolean => {
+      if (!visited[node]) {
+        visited[node] = true;
+        recStack[node] = true;
+        
+        const neighbors = dependencyGraph[node] || [];
+        for (const neighbor of neighbors) {
+          if (!visited[neighbor] && hasCycle(neighbor)) {
+            circularDependencies.push(`${node} -> ${neighbor}`);
+            return true;
+          } else if (recStack[neighbor]) {
+            circularDependencies.push(`${node} -> ${neighbor}`);
+            return true;
+          }
+        }
+      }
+      recStack[node] = false;
+      return false;
+    };
+    
+    Object.keys(dependencyGraph).forEach(node => {
+      if (!visited[node]) {
+        hasCycle(node);
+      }
+    });
+    
+    return circularDependencies;
   }
 }
