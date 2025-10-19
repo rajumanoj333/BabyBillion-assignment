@@ -60,7 +60,9 @@ export class DftTextFilterComponent {
   }
 
   onEnter(event: Event) {
-    this.enter.emit(event);
+    if (event instanceof KeyboardEvent) {
+      this.enter.emit(event);
+    }
   }
 
   clearValue() {

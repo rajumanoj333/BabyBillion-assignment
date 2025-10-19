@@ -1,12 +1,11 @@
 /* projects/demo-app/src/styles.css */
 
+@import '@angular/material/prebuilt-themes/azure-blue.css';
+
 /* Tailwind directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Material Design styles */
-@import '@angular/material/prebuilt-themes/azure-blue.css';
 
 /* small local styles */
 body {

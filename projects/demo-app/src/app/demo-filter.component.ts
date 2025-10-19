@@ -8,6 +8,7 @@ import { Router, ActivatedRoute } from '@angular/router';
   selector: 'app-demo-filter',
   standalone: true,
   imports: [CommonModule, DftFilterComponent],
+  providers: [MockOptionsService],
   template: `
     <section class="bg-white p-6 rounded shadow">
       <h2 class="text-xl font-semibold mb-4">Live Filter Demo (Hydrated)</h2>
@@ -88,7 +89,8 @@ export class DemoFilterComponent implements OnInit {
   // Dynamic options loading for category filter
   async getCategoryOptions(filter: DftFilterItem, search?: string, page: number = 1) {
     // Use the MockOptionsService to simulate dynamic loading with search and pagination
-    return this.optionsService.search(filter.name, search, page);
+    const result = await this.optionsService.search(filter.name, search, page);
+    return result.items;
   }
 
   onFiltersApplied(filters: DftFilterApplyModel[]) {

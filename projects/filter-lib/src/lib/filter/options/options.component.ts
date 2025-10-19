@@ -154,7 +154,7 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
             }
             
             // Use custom getOptions if provided, otherwise use mock service
-            return this.fromPromise(this.filter.getOptions(this.filter, search, this.currentPage));
+            return this.fromPromise(this.filter.getOptions!(this.filter, search, this.currentPage));
           }),
           map((result: any) => {
             this.loading = false;
