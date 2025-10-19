@@ -13,3 +13,27 @@ body {
   margin: 0;
   background-color: #fafafa;
 }
+
+.mat-mdc-button-touch-target {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.mat-form-field-suffix .clear-button {
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  vertical-align: middle;
+  margin: -4px 0;
+}
+
+.mat-form-field-suffix .clear-button .mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+}

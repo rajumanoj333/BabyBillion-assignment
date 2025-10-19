@@ -51,6 +51,7 @@ interface CompareOperator {
         <button 
           *ngIf="value && (value.min !== null || value.max !== null)" 
           mat-icon-button 
+          class="clear-button"
           (click)="clearValue()"
           aria-label="Clear">
           <mat-icon>close</mat-icon>
@@ -81,6 +82,7 @@ interface CompareOperator {
         <button 
           *ngIf="value" 
           mat-icon-button 
+          class="clear-button"
           (click)="clearValue()"
           aria-label="Clear">
           <mat-icon>close</mat-icon>

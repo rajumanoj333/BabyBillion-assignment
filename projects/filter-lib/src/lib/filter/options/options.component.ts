@@ -74,6 +74,7 @@ import { MockOptionsService, OptionItem, PageResult } from '../options.service';
         *ngIf="selectedValues && selectedValues.length > 0" 
         mat-icon-button 
         matSuffix
+        class="clear-button"
         (click)="clearSelection()"
         aria-label="Clear selection">
         <mat-icon>close</mat-icon>

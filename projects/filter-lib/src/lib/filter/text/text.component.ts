@@ -22,50 +22,50 @@ import { DftFilterItem } from '../filter.model';
         (input)="onValueChange($event)"
         (blur)="onBlur()"
         (keydown.enter)="onEnter($event)" />
-      <button 
-        *ngIf="value && value.length > 0" 
-        mat-icon-button 
-        matSuffix
-        (click)="clearValue()"
-        aria-label="Clear">
-        <mat-icon>close</mat-icon>
-      </button>
-    </mat-form-field>
-  `,
-  imports: [
-    CommonModule,
-    FormsModule,
-    ReactiveFormsModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatIconModule,
-    MatButtonModule
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush
-})
-export class DftTextFilterComponent {
-  @Input() filter!: DftFilterItem;
-  @Input() value: string | null = null;
-  @Output() valueChange = new EventEmitter<string | null>();
-  @Output() blur = new EventEmitter<void>();
-  @Output() enter = new EventEmitter<KeyboardEvent>();
-
-  onValueChange(event: any) {
-    const newValue = event.target.value;
-    this.valueChange.emit(newValue ? newValue.trim() : null);
-  }
-
-  onBlur() {
-    this.blur.emit();
-  }
-
-  onEnter(event: Event) {
-    if (event instanceof KeyboardEvent) {
-      this.enter.emit(event);
-    }
-  }
-
-  clearValue() {
-    this.valueChange.emit(null);
-  }
-}
+            <button class="clear-button"
+              *ngIf="value && value.length > 0"
+              mat-icon-button
+              matSuffix
+              (click)="clearValue()"
+              aria-label="Clear">
+              <mat-icon>close</mat-icon>
+            </button>
+          </mat-form-field>
+        `,
+        imports: [
+          CommonModule,
+          FormsModule,
+          ReactiveFormsModule,
+          MatFormFieldModule,
+          MatInputModule,
+          MatIconModule,
+          MatButtonModule
+        ],
+        changeDetection: ChangeDetectionStrategy.OnPush
+      })
+      export class DftTextFilterComponent {
+        @Input() filter!: DftFilterItem;
+        @Input() value: string | null = null;
+        @Output() valueChange = new EventEmitter<string | null>();
+        @Output() blur = new EventEmitter<void>();
+        @Output() enter = new EventEmitter<KeyboardEvent>();
+      
+        onValueChange(event: any) {
+          const newValue = event.target.value;
+          this.valueChange.emit(newValue ? newValue.trim() : null);
+        }
+      
+        onBlur() {
+          this.blur.emit();
+        }
+      
+        onEnter(event: Event) {
+          if (event instanceof KeyboardEvent) {
+            this.enter.emit(event);
+          }
+        }
+      
+        clearValue() {
+          this.valueChange.emit(null);
+        }
+      }
