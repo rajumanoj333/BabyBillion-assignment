@@ -4,8 +4,8 @@ import { CommonModule } from '@angular/common';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatOptionModule, MatOption } from '@angular/material/core';
-import { MatAutocompleteModule, MatAutocomplete } from '@angular/material/autocomplete';
+import { MatOptionModule } from '@angular/material/core';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,7 +13,7 @@ import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { Observable, BehaviorSubject, of, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, startWith, map, catchError } from 'rxjs/operators';
 import { DftFilterItem } from '../filter.model';
-import { MockOptionsService, OptionItem } from '../options.service';
+import { MockOptionsService, OptionItem, PageResult } from '../options.service';
 
 @Component({
   selector: 'dft-options-filter',
@@ -41,7 +41,7 @@ import { MockOptionsService, OptionItem } from '../options.service';
         </mat-option>
         
         <mat-option 
-          *ngFor="let option of filteredOptions$ | async" 
+          *ngFor="let option of (filteredOptions$ | async)?.items"
           [value]="option.value">
           {{ option.label }}
         </mat-option>
@@ -123,7 +123,7 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
   private subscriptions = new Subscription();
   
   // Dynamic options state
-  filteredOptions$ = new BehaviorSubject<OptionItem[]>([]);
+  filteredOptions$: Observable<PageResult | null> = of(null);
   loading = false;
   hasMoreOptions = false;
   currentPage = 1;
@@ -134,49 +134,39 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
     this.selectedValues = this.value || [];
     
     if (this.filter.isDynamicOptions && this.filter.getOptions) {
-      // Set up dynamic option loading with search and debouncing
       const search$ = this.searchControl.valueChanges.pipe(
         startWith(this.searchControl.value || ''),
-        debounceTime(300), // Debounce search
+        debounceTime(300),
         distinctUntilChanged(),
         map(search => search || '')
       );
       
-      // Combine search changes with option loading
-      this.subscriptions.add(
-        search$.pipe(
-          switchMap(search => {
-            this.loading = true;
-            // Reset pagination when search changes
-            if (search !== this.searchControl.value || this.currentPage !== 1) {
-              this.currentPage = 1;
-              this.allLoadedOptions = [];
-            }
-            
-            // Use custom getOptions if provided, otherwise use mock service
-            return this.fromPromise(this.filter.getOptions!(this.filter, search, this.currentPage));
-          }),
-          map((result: any) => {
-            this.loading = false;
-            this.hasMoreOptions = result.page < result.totalPages;
-            this.totalLoaded = result.totalItems;
-            
-            // Update all loaded options
-            if (this.currentPage === 1) {
-              this.allLoadedOptions = [...result.items];
-            } else {
-              this.allLoadedOptions = [...this.allLoadedOptions, ...result.items];
-            }
-            
-            return result.items;
-          }),
-          catchError((error) => {
-            this.loading = false;
-            console.error('Error loading options:', error);
-            return of([]);
-          })
-        ).subscribe(options => {
-          this.filteredOptions$.next(options);
+      this.filteredOptions$ = search$.pipe(
+        switchMap(search => {
+          this.loading = true;
+          if (search !== this.searchControl.value || this.currentPage !== 1) {
+            this.currentPage = 1;
+            this.allLoadedOptions = [];
+          }
+          return this.fromPromise(this.filter.getOptions!(this.filter, search, this.currentPage));
+        }),
+        map((result: PageResult) => {
+          this.loading = false;
+          this.hasMoreOptions = result.page < result.totalPages;
+          this.totalLoaded = result.totalItems;
+          
+          if (this.currentPage === 1) {
+            this.allLoadedOptions = [...result.items];
+          } else {
+            this.allLoadedOptions = [...this.allLoadedOptions, ...result.items];
+          }
+          
+          return { ...result, items: this.allLoadedOptions };
+        }),
+        catchError((error) => {
+          this.loading = false;
+          console.error('Error loading options:', error);
+          return of(null);
         })
       );
     }
@@ -197,15 +187,7 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
       this.selectedValues = [...this.selectedValues, selectedValue];
       this.valueChange.emit([...this.selectedValues]);
     }
-    // Clear search after selection to allow more selections
     this.searchControl.setValue('');
-  }
-
-  onAutocompleteClosed() {
-    // When autocomplete closes, clear search but keep selected values
-    setTimeout(() => {
-      this.searchControl.setValue('');
-    }, 1);
   }
 
   loadMoreOptions() {
@@ -216,8 +198,7 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
     
     const search = this.searchControl.value || '';
     
-    // Load more options using the same logic
-    let optionsPromise: Promise<any>;
+    let optionsPromise: Promise<PageResult>;
     if (this.filter.getOptions) {
       optionsPromise = this.filter.getOptions(this.filter, search, this.currentPage);
     } else {
@@ -229,9 +210,8 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
       this.hasMoreOptions = result.page < result.totalPages;
       this.totalLoaded = result.totalItems;
       
-      // Add new options to existing ones
       this.allLoadedOptions = [...this.allLoadedOptions, ...result.items];
-      this.filteredOptions$.next(result.items); // Only show newly loaded items in the dropdown
+      this.filteredOptions$ = of({ ...result, items: this.allLoadedOptions });
     }).catch(error => {
       this.loading = false;
       console.error('Error loading more options:', error);
@@ -253,7 +233,6 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
     const option = this.allLoadedOptions.find(opt => opt.value === value);
     if (option) return option.label;
     
-    // If not found in loaded options, look in static options
     const staticOption = this.staticOptions.find(opt => opt.value === value);
     return staticOption ? staticOption.label : String(value);
   }
@@ -262,7 +241,6 @@ export class DftOptionsFilterComponent implements OnInit, OnDestroy {
     return item;
   }
   
-  // Helper method to convert promise to observable
   private fromPromise<T>(promise: Promise<T>): Observable<T> {
     return new Observable(observer => {
       promise.then(

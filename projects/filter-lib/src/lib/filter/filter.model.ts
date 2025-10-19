@@ -1,3 +1,5 @@
+import { PageResult } from "./options.service";
+
 // projects/filter-lib/src/lib/filter/filter.model.ts
 export type FilterType = 'text' | 'options' | 'compare';
 
@@ -7,7 +9,11 @@ export interface DftFilterItem {
   label?: string;
   placeholder?: string;
   isDynamicOptions?: boolean;
-  getOptions?: (filter: DftFilterItem, search?: string, page?: number) => Promise<{ label: string; value: any }[]>;
+  getOptions?: (
+    filter: DftFilterItem,
+    search?: string,
+    page?: number
+  ) => Promise<PageResult>;
   compareType?: 'range' | 'single';
   // Additional properties for enhanced functionality
   minValue?: number;
